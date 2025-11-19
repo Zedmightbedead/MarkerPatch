@@ -21,10 +21,10 @@ You can download it here: https://aka.ms/vs/17/release/vc_redist.x86.exe
 ### Steam Deck/Linux Specific Instructions (Windows users can skip this)
 
 > [!WARNING]
-> To launch the game on Steam Deck or Linux, open the game's properties in Steam and include `WINEDLLOVERRIDES="dinput8=n,b" %command%` in the launch options.
+> To launch the game on Steam Deck or Linux, set the game’s compatibility tool to Proton Experimental in the Steam properties.
 >
 > **Note**: DXVK limits the framerate to 60 FPS by default. To increase this limit, add the following to your launch options (example for 120 FPS):  
-> `DXVK_CONFIG="d3d9.maxFrameRate = 120" WINEDLLOVERRIDES="dinput8=n,b" %command%`
+> `DXVK_CONFIG="d3d9.maxFrameRate = 120" %command%`
 
 # Features
 
