@@ -1,14 +1,17 @@
 ﻿#define MINI_CASE_SENSITIVE
 #define _USE_MATH_DEFINES
+#define NOMINMAX
 
 #include <Windows.h>
-#include <dinput.h>
 
 #include <stacktrace>
 
 #include "ini.hpp"
+#include "Controller.hpp"
 #include "dllmain.hpp"
 #include "helper.hpp"
+
+#pragma comment(lib, "SDL3-static.lib")
 
 struct GlobalState
 {
@@ -35,6 +38,7 @@ struct GlobalState
 	LONG frameRawY = 0;
 
 	// Camera state
+	bool isAiming = false;
 	bool isInNormalCamera = false;
 	int aimingPassCount = 0;
 
@@ -65,6 +69,8 @@ struct GameAddresses
 GameAddresses g_Addresses;
 
 static constexpr float TARGET_FRAME_TIME = 1.0f / 30.0f;
+static constexpr float PITCH_LIMIT_NORMAL = M_PI / 3.0f;
+static constexpr float PITCH_LIMIT_AIM_DOWN = -5.0f * M_PI / 12.0f;
 
 // =============================
 // Ini Variables
@@ -95,7 +101,12 @@ float FontScalingFactor = 0;
 
 // Input
 bool RawMouseInput = false;
+bool UseSDLControllerInput = false;
 bool BlockDirectInputDevices = false;
+bool GyroEnabled = false;
+float GyroSensitivity = 0.0f;
+float GyroSmoothing = 0.0f;
+bool TouchpadEnabled = false;
 
 // Graphics
 int MaxAnisotropy = 0;
@@ -139,7 +150,12 @@ static void ReadConfig()
 
 	// Input
 	RawMouseInput = IniHelper::ReadInteger("Input", "RawMouseInput", 1) == 1;
+	UseSDLControllerInput = IniHelper::ReadInteger("Input", "UseSDLControllerInput", 1) == 1;
 	BlockDirectInputDevices = IniHelper::ReadInteger("Input", "BlockDirectInputDevices", 1) == 1;
+	GyroEnabled = IniHelper::ReadInteger("Input", "GyroEnabled", 0) == 1;
+	GyroSensitivity = IniHelper::ReadFloat("Controller", "GyroSensitivity", 1.0f);
+	GyroSmoothing = IniHelper::ReadFloat("Controller", "GyroSmoothing", 0.016f);
+	TouchpadEnabled = IniHelper::ReadInteger("Controller", "TouchpadEnabled", 1) == 1;
 
 	// Graphics
 	MaxAnisotropy = IniHelper::ReadInteger("Graphics", "MaxAnisotropy", 16);
@@ -154,16 +170,24 @@ static void ReadConfig()
 	EnableZealotDLC = IniHelper::ReadInteger("DLC", "EnableZealotDLC", 0) == 1;
 	EnableRivetGunDLC = IniHelper::ReadInteger("DLC", "EnableRivetGunDLC", 0) == 1;
 
-	if (AutoResolution)
+	if (AutoResolution || UseSDLControllerInput)
 	{
 		auto [screenWidth, screenHeight] = SystemHelper::GetScreenResolution();
 		g_State.screenWidth = screenWidth;
 		g_State.screenHeight = screenHeight;
+
+		ControllerHelper::SetTouchpadDimensions(screenWidth, screenHeight);
 	}
 
 	MaxAnisotropy = std::clamp(MaxAnisotropy, 0, 16);
+
 	IncreasedEntityPersistenceBodies = std::clamp(IncreasedEntityPersistenceBodies, 0, 35);
 	IncreasedEntityPersistenceLimbs = std::clamp(IncreasedEntityPersistenceLimbs, 0, 120);
+
+	ControllerHelper::SetGyroEnabled(GyroEnabled);
+	ControllerHelper::SetGyroSensitivity(GyroSensitivity);
+	ControllerHelper::SetGyroSmoothing(GyroSmoothing);
+	ControllerHelper::SetTouchpadEnabled(TouchpadEnabled);
 }
 
 #pragma region Helper
@@ -585,6 +609,8 @@ static int __stdcall ApplyControlConfiguration_Hook(int a1)
 	g_State.isYInverted = *(BYTE*)(a1 + 1);
 	g_State.mouseSens = *(float*)(a1 + 12);
 	if (g_State.mouseSens == 0.0f) g_State.mouseSens = 0.005f; // we still want to use the mouse
+	ControllerHelper::SetGyroInvertX(g_State.isXInverted);
+	ControllerHelper::SetGyroInvertY(g_State.isYInverted);
 	return ApplyControlConfiguration.stdcall<int>(a1);
 }
 
@@ -663,8 +689,10 @@ static int __fastcall UpdateCameraPosition_Hook(int thisp, float a2)
 
 static void __fastcall UpdateAimingCamera_Hook(void** thisp, int, int a2, int a3)
 {
+	g_State.isAiming = true;
 	g_State.aimingPassCount = 2;
 	UpdateAimingCamera.unsafe_thiscall<void>(thisp, a2, a3);
+	g_State.isAiming = false;
 }
 
 static void __fastcall UpdatePlayerCamera_Hook(int thisp, float a2)
@@ -678,11 +706,41 @@ static int __fastcall ApplyCameraRotation_Hook(int* thisp, int, unsigned __int64
 {
 	if (g_State.isControllerActive)
 	{
+		// Add gyro while aiming
+		if (g_State.isAiming && ControllerHelper::IsGyroEnabled())
+		{
+			float gyroYaw = 0.0f;
+			float gyroPitch = 0.0f;
+			ControllerHelper::GetProcessedGyroDelta(gyroYaw, gyroPitch);
+
+			if (gyroYaw != 0.0f || gyroPitch != 0.0f)
+			{
+				// Unpack the original angles
+				float angles[2];
+				std::memcpy(angles, &a2, sizeof(angles));
+
+				// Add gyro directly as radians
+				angles[0] += gyroPitch;
+				angles[1] += gyroYaw;
+
+				float currentPitch = *(float*)thisp;
+				float newPitch = currentPitch + angles[0];
+
+				if (newPitch > PITCH_LIMIT_NORMAL)
+				{
+					angles[0] = PITCH_LIMIT_NORMAL - currentPitch;
+				}
+				else if (newPitch < PITCH_LIMIT_AIM_DOWN)
+				{
+					angles[0] = PITCH_LIMIT_AIM_DOWN - currentPitch;
+				}
+
+				return ApplyCameraRotation.unsafe_thiscall<int>(thisp, PackAngles(angles[0], angles[1]), a3, a4);
+			}
+		}
+
 		return ApplyCameraRotation.unsafe_thiscall<int>(thisp, a2, a3, a4);
 	}
-
-	const float PITCH_LIMIT_NORMAL = M_PI / 3.0f; // 60 degrees
-	const float PITCH_LIMIT_AIM_DOWN = -5.0f * M_PI / 12.0f; // -75 degrees
 
 	// Normal camera movement
 	if (g_State.isInNormalCamera)
@@ -697,6 +755,7 @@ static int __fastcall ApplyCameraRotation_Hook(int* thisp, int, unsigned __int64
 
 		float currentPitch = *(float*)thisp;
 		float newPitch = currentPitch + verticalDelta;
+
 		if (newPitch > PITCH_LIMIT_NORMAL)
 		{
 			verticalDelta = PITCH_LIMIT_NORMAL - currentPitch;
@@ -705,11 +764,12 @@ static int __fastcall ApplyCameraRotation_Hook(int* thisp, int, unsigned __int64
 		{
 			verticalDelta = -PITCH_LIMIT_NORMAL - currentPitch;
 		}
+
 		return ApplyCameraRotation.unsafe_thiscall<int>(thisp, PackAngles(verticalDelta, horizontalDelta), a3, a4);
 	}
 
 	// Aiming - first pass
-	if (g_State.aimingPassCount == 2)
+	if (g_State.isAiming && g_State.aimingPassCount == 2)
 	{
 		float horizontalDelta, verticalDelta;
 		ScaleRawInput(static_cast<float>(g_State.frameRawX), static_cast<float>(g_State.frameRawY), 750.0f, horizontalDelta, verticalDelta);
@@ -721,6 +781,7 @@ static int __fastcall ApplyCameraRotation_Hook(int* thisp, int, unsigned __int64
 
 		float currentPitch = *(float*)thisp;
 		float newPitch = currentPitch + verticalDelta;
+
 		if (newPitch > PITCH_LIMIT_NORMAL)
 		{
 			verticalDelta = PITCH_LIMIT_NORMAL - currentPitch;
@@ -729,12 +790,13 @@ static int __fastcall ApplyCameraRotation_Hook(int* thisp, int, unsigned __int64
 		{
 			verticalDelta = PITCH_LIMIT_AIM_DOWN - currentPitch;
 		}
+
 		g_State.aimingPassCount--;
 		return ApplyCameraRotation.unsafe_thiscall<int>(thisp, PackAngles(verticalDelta, horizontalDelta), a3, a4);
 	}
 
 	// Aiming - second pass
-	if (g_State.aimingPassCount == 1)
+	if (g_State.isAiming && g_State.aimingPassCount == 1)
 	{
 		float horizontalDelta, verticalDelta;
 		ScaleRawInput(0.0f, static_cast<float>(g_State.frameRawY), 750.0f, horizontalDelta, verticalDelta);
@@ -744,6 +806,7 @@ static int __fastcall ApplyCameraRotation_Hook(int* thisp, int, unsigned __int64
 
 		float currentPitch = *(float*)thisp;
 		float newPitch = currentPitch + verticalDelta;
+
 		if (newPitch > PITCH_LIMIT_NORMAL)
 		{
 			verticalDelta = PITCH_LIMIT_NORMAL - currentPitch;
@@ -752,6 +815,7 @@ static int __fastcall ApplyCameraRotation_Hook(int* thisp, int, unsigned __int64
 		{
 			verticalDelta = PITCH_LIMIT_AIM_DOWN - currentPitch;
 		}
+
 		g_State.aimingPassCount--;
 		return ApplyCameraRotation.unsafe_thiscall<int>(thisp, PackAngles(verticalDelta, 0.0f), a3, a4);
 	}
@@ -789,6 +853,25 @@ static bool __cdecl IsXInputDevice_hook(DWORD* lpddi)
 {
 	// Skip the expensive verification, we filter out DirectInput devices elsewhere
 	return false;
+}
+
+// =========================
+// UseSDLControllerInput
+// =========================
+
+safetyhook::InlineHook XInputGetStateHook;
+safetyhook::InlineHook XInputSetStateHook;
+
+static DWORD WINAPI XInputGetState_Hook(DWORD dwUserIndex, XINPUT_STATE* pState)
+{
+	if (dwUserIndex != 0) return ERROR_DEVICE_NOT_CONNECTED;
+	return ControllerHelper::PollController(pState);
+}
+
+static DWORD WINAPI XInputSetState_Hook(DWORD dwUserIndex, XINPUT_VIBRATION* pVibration)
+{
+	if (dwUserIndex != 0) return ERROR_DEVICE_NOT_CONNECTED;
+	return ControllerHelper::SetVibration(pVibration);
 }
 
 // =====================
@@ -1384,6 +1467,15 @@ static void ApplyFilterInputDevices()
 	);
 }
 
+static void ApplyUseSDLControllerInput()
+{
+	if (!UseSDLControllerInput) return;
+
+	ControllerHelper::InitializeSDLGamepad();
+	XInputGetStateHook = HookHelper::CreateHookAPI(L"XINPUT1_3.dll", "XInputGetState", &XInputGetState_Hook);
+	XInputSetStateHook = HookHelper::CreateHookAPI(L"XINPUT1_3.dll", "XInputSetState", &XInputSetState_Hook);
+}
+
 static void ApplyTextureFiltering()
 {
 	if (MaxAnisotropy == 0 && !ForceTrilinearFiltering) return;
@@ -1466,6 +1558,7 @@ static void Init()
 	// Input
 	ApplyRawMouseInput();
 	ApplyFilterInputDevices();
+	ApplyUseSDLControllerInput();
 
 	// Graphics
 	ApplyTextureFiltering();
@@ -1523,6 +1616,10 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 		}
 		case DLL_PROCESS_DETACH:
 		{
+			if (UseSDLControllerInput)
+			{
+				ControllerHelper::ShutdownSDLGamepad();
+			}
 			break;
 		}
 	}

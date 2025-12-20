@@ -94,49 +94,44 @@ namespace MemoryHelper
 		return value;
 	}
 
-	DWORD64 PatternScan(HMODULE hModule, std::string_view signature)
+	DWORD PatternScan(HMODULE hModule, std::string_view signature)
 	{
 		auto dosHeader = reinterpret_cast<PIMAGE_DOS_HEADER>(hModule);
 		if (dosHeader->e_magic != IMAGE_DOS_SIGNATURE)
 			return 0;
 
 		auto ntHeaders = reinterpret_cast<PIMAGE_NT_HEADERS>(reinterpret_cast<BYTE*>(hModule) + dosHeader->e_lfanew);
-
 		if (ntHeaders->Signature != IMAGE_NT_SIGNATURE)
 			return 0;
 
 		DWORD sizeOfImage = ntHeaders->OptionalHeader.SizeOfImage;
-		DWORD64 baseAddress = reinterpret_cast<DWORD64>(hModule);
+		BYTE* baseAddress = reinterpret_cast<BYTE*>(hModule);
 
-		// Convert pattern to byte array and mask
+		// Parse pattern
 		std::vector<uint8_t> patternBytes;
 		std::vector<bool> mask;
-		patternBytes.reserve(signature.size() / 2);
-		mask.reserve(signature.size() / 2);
 
-		for (size_t i = 0; i < signature.length(); ++i)
+		for (size_t i = 0; i < signature.length(); i++)
 		{
-			if (signature[i] == ' ')
-				continue;
+			if (signature[i] == ' ') continue;
 
 			if (signature[i] == '?')
 			{
 				patternBytes.push_back(0);
 				mask.push_back(true);
 				if (i + 1 < signature.length() && signature[i + 1] == '?')
-				{
 					i++;
-				}
 			}
 			else
 			{
-				// fast hex parse
-				auto hexChar = [](char c) noexcept -> uint8_t {
+				auto hexChar = [](char c) noexcept -> uint8_t
+				{
 					if (c >= '0' && c <= '9') return c - '0';
 					if (c >= 'A' && c <= 'F') return c - 'A' + 10;
 					if (c >= 'a' && c <= 'f') return c - 'a' + 10;
 					return 0;
-					};
+				};
+
 				uint8_t byte = (hexChar(signature[i]) << 4) | hexChar(signature[i + 1]);
 				patternBytes.push_back(byte);
 				mask.push_back(false);
@@ -145,32 +140,35 @@ namespace MemoryHelper
 		}
 
 		size_t patternSize = patternBytes.size();
-		BYTE* data = reinterpret_cast<BYTE*>(baseAddress);
+		if (patternSize == 0) return reinterpret_cast<DWORD>(baseAddress);
 
-		// Find first non-wildcard byte for quick scans
+		// Find first non-wildcard for optimized search
 		size_t firstCheck = 0;
 		while (firstCheck < patternSize && mask[firstCheck])
 			firstCheck++;
 
 		if (firstCheck == patternSize)
-			return baseAddress; // all wildcards -> match at start
+			return reinterpret_cast<DWORD>(baseAddress);
 
+		// Use memchr with bounds checking
+		BYTE* scanStart = baseAddress;
+		BYTE* scanEnd = baseAddress + sizeOfImage - patternSize;
 		uint8_t firstByte = patternBytes[firstCheck];
-		BYTE* scanEnd = data + sizeOfImage - patternSize;
-		BYTE* cur = data;
 
-		while (cur <= scanEnd)
+		while (scanStart <= scanEnd)
 		{
-			// find next occurrence of first significant byte
-			cur = reinterpret_cast<BYTE*>(std::memchr(cur + firstCheck, firstByte, (scanEnd + firstCheck) - cur));
-			if (!cur) break;
-			cur -= firstCheck;
+			// Find next candidate using optimized memchr
+			BYTE* candidate = reinterpret_cast<BYTE*>(std::memchr(scanStart + firstCheck, firstByte, (scanEnd - scanStart) - firstCheck + 1));
 
-			// verify full pattern
+			if (!candidate) break;
+
+			candidate -= firstCheck;
+
+			// Verify full pattern
 			bool found = true;
 			for (size_t j = 0; j < patternSize; ++j)
 			{
-				if (!mask[j] && data[(cur - data) + j] != patternBytes[j])
+				if (!mask[j] && candidate[j] != patternBytes[j])
 				{
 					found = false;
 					break;
@@ -178,9 +176,9 @@ namespace MemoryHelper
 			}
 
 			if (found)
-				return reinterpret_cast<DWORD64>(cur);
+				return reinterpret_cast<DWORD>(candidate);
 
-			cur++;
+			scanStart = candidate + 1;
 		}
 
 		return 0;
@@ -230,28 +228,29 @@ namespace HookHelper
 		char errorMsg[0x200];
 		const char* errorType = "Unknown error";
 
-		switch (err.type) {
-		case safetyhook::InlineHook::Error::BAD_ALLOCATION:
-			errorType = "BAD_ALLOCATION";
-			break;
-		case safetyhook::InlineHook::Error::FAILED_TO_DECODE_INSTRUCTION:
-			errorType = "FAILED_TO_DECODE_INSTRUCTION";
-			break;
-		case safetyhook::InlineHook::Error::SHORT_JUMP_IN_TRAMPOLINE:
-			errorType = "SHORT_JUMP_IN_TRAMPOLINE";
-			break;
-		case safetyhook::InlineHook::Error::IP_RELATIVE_INSTRUCTION_OUT_OF_RANGE:
-			errorType = "IP_RELATIVE_INSTRUCTION_OUT_OF_RANGE";
-			break;
-		case safetyhook::InlineHook::Error::UNSUPPORTED_INSTRUCTION_IN_TRAMPOLINE:
-			errorType = "UNSUPPORTED_INSTRUCTION_IN_TRAMPOLINE";
-			break;
-		case safetyhook::InlineHook::Error::FAILED_TO_UNPROTECT:
-			errorType = "FAILED_TO_UNPROTECT";
-			break;
-		case safetyhook::InlineHook::Error::NOT_ENOUGH_SPACE:
-			errorType = "NOT_ENOUGH_SPACE";
-			break;
+		switch (err.type) 
+		{
+			case safetyhook::InlineHook::Error::BAD_ALLOCATION:
+				errorType = "BAD_ALLOCATION";
+				break;
+			case safetyhook::InlineHook::Error::FAILED_TO_DECODE_INSTRUCTION:
+				errorType = "FAILED_TO_DECODE_INSTRUCTION";
+				break;
+			case safetyhook::InlineHook::Error::SHORT_JUMP_IN_TRAMPOLINE:
+				errorType = "SHORT_JUMP_IN_TRAMPOLINE";
+				break;
+			case safetyhook::InlineHook::Error::IP_RELATIVE_INSTRUCTION_OUT_OF_RANGE:
+				errorType = "IP_RELATIVE_INSTRUCTION_OUT_OF_RANGE";
+				break;
+			case safetyhook::InlineHook::Error::UNSUPPORTED_INSTRUCTION_IN_TRAMPOLINE:
+				errorType = "UNSUPPORTED_INSTRUCTION_IN_TRAMPOLINE";
+				break;
+			case safetyhook::InlineHook::Error::FAILED_TO_UNPROTECT:
+				errorType = "FAILED_TO_UNPROTECT";
+				break;
+			case safetyhook::InlineHook::Error::NOT_ENOUGH_SPACE:
+				errorType = "NOT_ENOUGH_SPACE";
+				break;
 		}
 
 		sprintf_s(errorMsg, "Failed to create hook at %p\nError: %s", addr, errorType);

@@ -18,6 +18,12 @@
     <ClInclude Include="..\include\safetyhook\safetyhook.hpp">
       <Filter>safetyhook</Filter>
     </ClInclude>
+    <ClInclude Include="..\include\Controller.hpp">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\ini.hpp">
+      <Filter>include</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="MarkerPatch.ini" />
@@ -25,6 +31,9 @@
   <ItemGroup>
     <Filter Include="safetyhook">
       <UniqueIdentifier>{580ca3c3-8289-4cb8-8f64-6e2215f8cc0e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="include">
+      <UniqueIdentifier>{7532764d-194b-4012-a1ac-90e1f3171893}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>
