@@ -136,7 +136,7 @@ namespace ControllerHelper
 	// Frame Timing
 	// ==========================================================
 
-	inline static void UpdateFrameTiming()
+	inline void UpdateFrameTiming()
 	{
 		LARGE_INTEGER currentTime;
 		QueryPerformanceCounter(&currentTime);
@@ -151,7 +151,7 @@ namespace ControllerHelper
 	// Controller Database
 	// ==========================================================
 
-	inline static bool LoadGamepadMappings()
+	inline bool LoadGamepadMappings()
 	{
 		const char* paths[] =
 		{
@@ -175,7 +175,7 @@ namespace ControllerHelper
 	// Capability Detection
 	// ==========================================================
 
-	inline static GamepadStyle DetectGamepadStyle(SDL_Gamepad* pGamepad)
+	inline GamepadStyle DetectGamepadStyle(SDL_Gamepad* pGamepad)
 	{
 		if (!pGamepad)
 			return GamepadStyle::Unknown;
@@ -202,7 +202,7 @@ namespace ControllerHelper
 		}
 	}
 
-	inline static void LoadGamepadCapabilities(SDL_Gamepad* pGamepad)
+	inline void LoadGamepadCapabilities(SDL_Gamepad* pGamepad)
 	{
 		s_capabilities = GamepadCapabilities();
 
@@ -226,6 +226,18 @@ namespace ControllerHelper
 		{
 			SDL_SetGamepadSensorEnabled(pGamepad, SDL_SENSOR_ACCEL, true);
 		}
+	}
+
+	inline void ResetControllerState()
+	{
+		s_capabilities = GamepadCapabilities();
+		s_gyroState = GyroState();
+		s_gyroProcessing = GyroProcessingState();
+		s_gyroOffset = GyroAutoOffset();
+		s_touchpadFinger[0] = TouchpadState();
+		s_touchpadFinger[1] = TouchpadState();
+		s_wasTouchpadPressed[0] = false;
+		s_wasTouchpadPressed[1] = false;
 	}
 
 	// ==========================================================
@@ -256,15 +268,8 @@ namespace ControllerHelper
 			s_pGamepad = nullptr;
 		}
 
-		s_capabilities = GamepadCapabilities();
-		s_gyroState = GyroState();
-		s_gyroProcessing = GyroProcessingState();
-		s_gyroOffset = GyroAutoOffset();
+		ResetControllerState();
 		s_frameTiming = FrameTiming();
-		s_touchpadFinger[0] = TouchpadState();
-		s_touchpadFinger[1] = TouchpadState();
-		s_wasTouchpadPressed[0] = false;
-		s_wasTouchpadPressed[1] = false;
 
 		SDL_Quit();
 	}
@@ -377,14 +382,14 @@ namespace ControllerHelper
 	// Gyro Auto-Calibration
 	// ==========================================================
 
-	inline static inline void ResetStillnessTracking()
+	inline void ResetStillnessTracking()
 	{
 		s_gyroOffset.stillnessTimer = 0.0f;
 		s_gyroOffset.hasStartGrav = false;
 		s_gyroOffset.maxGravAngleDuringWindow = 0.0f;
 	}
 
-	inline static void UpdateGyroOffset(float gyroX, float gyroY, float gyroZ, float accelX, float accelY, float accelZ, float deltaTime)
+	inline void UpdateGyroOffset(float gyroX, float gyroY, float gyroZ, float accelX, float accelY, float accelZ, float deltaTime)
 	{
 		if (!std::isfinite(deltaTime) || deltaTime <= 0.0f)
 			return;
@@ -752,7 +757,7 @@ namespace ControllerHelper
 	// Processing - Gyro (Internal)
 	// ==========================================================
 
-	inline static void ProcessGyro()
+	inline void ProcessGyro()
 	{
 		s_gyroState.isValid = false;
 
@@ -818,7 +823,7 @@ namespace ControllerHelper
 	// Processing - Touchpad (Internal)
 	// ==========================================================
 
-	inline static void ProcessTouchpadMouse()
+	inline void ProcessTouchpadMouse()
 	{
 		if (!s_pGamepad || !s_capabilities.hasTouchpad || !s_touchpadConfig.isEnabled)
 			return;
@@ -862,31 +867,43 @@ namespace ControllerHelper
 		}
 	}
 
-	inline static void ProcessTouchpadClick()
+	static void ProcessTouchpadClick()
 	{
-		if (!s_pGamepad || !s_capabilities.hasTouchpad || !s_touchpadConfig.isEnabled)
+		if (!s_pGamepad || !s_capabilities.hasTouchpad || !TouchpadEnabled)
 			return;
 
-		for (int touchpadIndex = 0; touchpadIndex < 2; touchpadIndex++)
-		{
-			bool isPressed = SDL_GetGamepadButton(s_pGamepad, SDL_GAMEPAD_BUTTON_TOUCHPAD);
+		bool isPressed = SDL_GetGamepadButton(s_pGamepad, SDL_GAMEPAD_BUTTON_TOUCHPAD);
 
-			if (isPressed && !s_wasTouchpadPressed[touchpadIndex])
-			{
-				INPUT input = {};
-				input.type = INPUT_MOUSE;
-				input.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
-				SendInput(1, &input, sizeof(INPUT));
-			}
-			else if (!isPressed && s_wasTouchpadPressed[touchpadIndex])
+		if (isPressed && !s_wasTouchpadPressed[0])
+		{
+			INPUT input = {};
+			input.type = INPUT_MOUSE;
+			input.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
+			SendInput(1, &input, sizeof(INPUT));
+		}
+		else if (!isPressed && s_wasTouchpadPressed[0])
+		{
+			INPUT input = {};
+			input.type = INPUT_MOUSE;
+			input.mi.dwFlags = MOUSEEVENTF_LEFTUP;
+			SendInput(1, &input, sizeof(INPUT));
+		}
+
+		s_wasTouchpadPressed[0] = isPressed;
+	}
+
+	inline void ReleaseTouchpadClick()
+	{
+		for (int i = 0; i < 2; i++)
+		{
+			if (s_wasTouchpadPressed[i])
 			{
 				INPUT input = {};
 				input.type = INPUT_MOUSE;
 				input.mi.dwFlags = MOUSEEVENTF_LEFTUP;
 				SendInput(1, &input, sizeof(INPUT));
+				s_wasTouchpadPressed[i] = false;
 			}
-
-			s_wasTouchpadPressed[touchpadIndex] = isPressed;
 		}
 	}
 
@@ -894,7 +911,7 @@ namespace ControllerHelper
 	// Event Processing
 	// ==========================================================
 
-	inline static void OnGamepadConnected(SDL_JoystickID deviceId)
+	inline void OnGamepadConnected(SDL_JoystickID deviceId)
 	{
 		if (s_pGamepad)
 			return;
@@ -906,7 +923,7 @@ namespace ControllerHelper
 		}
 	}
 
-	inline static void OnGamepadDisconnected(SDL_JoystickID deviceId)
+	inline void OnGamepadDisconnected(SDL_JoystickID deviceId)
 	{
 		if (!s_pGamepad)
 			return;
@@ -915,15 +932,10 @@ namespace ControllerHelper
 		{
 			SDL_CloseGamepad(s_pGamepad);
 			s_pGamepad = nullptr;
-			s_capabilities = GamepadCapabilities();
-			s_gyroState = GyroState();
-			s_gyroProcessing = GyroProcessingState();
-			s_gyroOffset = GyroAutoOffset();
-			s_touchpadFinger[0] = TouchpadState();
-			s_touchpadFinger[1] = TouchpadState();
-			s_wasTouchpadPressed[0] = false;
-			s_wasTouchpadPressed[1] = false;
+			ReleaseTouchpadClick();
+			ResetControllerState();
 
+			// Try to connect to another available gamepad
 			int count = 0;
 			SDL_JoystickID* gamepads = SDL_GetGamepads(&count);
 			if (gamepads)
@@ -937,12 +949,13 @@ namespace ControllerHelper
 						break;
 					}
 				}
+
 				SDL_free(gamepads);
 			}
 		}
 	}
 
-	inline static void ProcessSDLEvents()
+	inline void ProcessSDLEvents()
 	{
 		SDL_Event event;
 		while (SDL_PollEvent(&event))
@@ -959,6 +972,49 @@ namespace ControllerHelper
 			}
 		}
 	}
+
+	// ==========================================================
+	// Button Mapping
+	// ==========================================================
+
+	struct ButtonMapping
+	{
+		SDL_GamepadButton sdlButton;
+		WORD xinputMask;
+	};
+
+	// Buttons that don't change based on controller style
+	inline constexpr ButtonMapping s_commonButtons[] =
+	{
+		{ SDL_GAMEPAD_BUTTON_DPAD_UP,        XINPUT_GAMEPAD_DPAD_UP },
+		{ SDL_GAMEPAD_BUTTON_DPAD_DOWN,      XINPUT_GAMEPAD_DPAD_DOWN },
+		{ SDL_GAMEPAD_BUTTON_DPAD_LEFT,      XINPUT_GAMEPAD_DPAD_LEFT },
+		{ SDL_GAMEPAD_BUTTON_DPAD_RIGHT,     XINPUT_GAMEPAD_DPAD_RIGHT },
+		{ SDL_GAMEPAD_BUTTON_START,          XINPUT_GAMEPAD_START },
+		{ SDL_GAMEPAD_BUTTON_BACK,           XINPUT_GAMEPAD_BACK },
+		{ SDL_GAMEPAD_BUTTON_LEFT_STICK,     XINPUT_GAMEPAD_LEFT_THUMB },
+		{ SDL_GAMEPAD_BUTTON_RIGHT_STICK,    XINPUT_GAMEPAD_RIGHT_THUMB },
+		{ SDL_GAMEPAD_BUTTON_LEFT_SHOULDER,  XINPUT_GAMEPAD_LEFT_SHOULDER },
+		{ SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, XINPUT_GAMEPAD_RIGHT_SHOULDER },
+	};
+
+	// Face buttons for standard layout (Xbox/PlayStation)
+	inline constexpr ButtonMapping s_standardFaceButtons[] =
+	{
+		{ SDL_GAMEPAD_BUTTON_SOUTH, XINPUT_GAMEPAD_A },
+		{ SDL_GAMEPAD_BUTTON_EAST,  XINPUT_GAMEPAD_B },
+		{ SDL_GAMEPAD_BUTTON_WEST,  XINPUT_GAMEPAD_X },
+		{ SDL_GAMEPAD_BUTTON_NORTH, XINPUT_GAMEPAD_Y },
+	};
+
+	// Face buttons for Nintendo layout (A/B and X/Y swapped)
+	inline constexpr ButtonMapping s_nintendoFaceButtons[] =
+	{
+		{ SDL_GAMEPAD_BUTTON_EAST,  XINPUT_GAMEPAD_A },
+		{ SDL_GAMEPAD_BUTTON_SOUTH, XINPUT_GAMEPAD_B },
+		{ SDL_GAMEPAD_BUTTON_NORTH, XINPUT_GAMEPAD_X },
+		{ SDL_GAMEPAD_BUTTON_WEST,  XINPUT_GAMEPAD_Y },
+	};
 
 	// ==========================================================
 	// Main Poll Function
@@ -984,53 +1040,17 @@ namespace ControllerHelper
 
 		WORD buttons = 0;
 
-		if (SDL_GetGamepadButton(s_pGamepad, SDL_GAMEPAD_BUTTON_DPAD_UP))
-			buttons |= XINPUT_GAMEPAD_DPAD_UP;
-		if (SDL_GetGamepadButton(s_pGamepad, SDL_GAMEPAD_BUTTON_DPAD_DOWN))
-			buttons |= XINPUT_GAMEPAD_DPAD_DOWN;
-		if (SDL_GetGamepadButton(s_pGamepad, SDL_GAMEPAD_BUTTON_DPAD_LEFT))
-			buttons |= XINPUT_GAMEPAD_DPAD_LEFT;
-		if (SDL_GetGamepadButton(s_pGamepad, SDL_GAMEPAD_BUTTON_DPAD_RIGHT))
-			buttons |= XINPUT_GAMEPAD_DPAD_RIGHT;
-
-		if (SDL_GetGamepadButton(s_pGamepad, SDL_GAMEPAD_BUTTON_START))
-			buttons |= XINPUT_GAMEPAD_START;
-		if (SDL_GetGamepadButton(s_pGamepad, SDL_GAMEPAD_BUTTON_BACK))
-			buttons |= XINPUT_GAMEPAD_BACK;
-
-		if (SDL_GetGamepadButton(s_pGamepad, SDL_GAMEPAD_BUTTON_LEFT_STICK))
-			buttons |= XINPUT_GAMEPAD_LEFT_THUMB;
-		if (SDL_GetGamepadButton(s_pGamepad, SDL_GAMEPAD_BUTTON_RIGHT_STICK))
-			buttons |= XINPUT_GAMEPAD_RIGHT_THUMB;
-
-		if (SDL_GetGamepadButton(s_pGamepad, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER))
-			buttons |= XINPUT_GAMEPAD_LEFT_SHOULDER;
-		if (SDL_GetGamepadButton(s_pGamepad, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER))
-			buttons |= XINPUT_GAMEPAD_RIGHT_SHOULDER;
-
-		bool swapButtons = (s_capabilities.style == GamepadStyle::Nintendo);
-
-		if (swapButtons)
+		for (const auto& mapping : s_commonButtons)
 		{
-			if (SDL_GetGamepadButton(s_pGamepad, SDL_GAMEPAD_BUTTON_EAST))
-				buttons |= XINPUT_GAMEPAD_A;
-			if (SDL_GetGamepadButton(s_pGamepad, SDL_GAMEPAD_BUTTON_SOUTH))
-				buttons |= XINPUT_GAMEPAD_B;
-			if (SDL_GetGamepadButton(s_pGamepad, SDL_GAMEPAD_BUTTON_NORTH))
-				buttons |= XINPUT_GAMEPAD_X;
-			if (SDL_GetGamepadButton(s_pGamepad, SDL_GAMEPAD_BUTTON_WEST))
-				buttons |= XINPUT_GAMEPAD_Y;
+			if (SDL_GetGamepadButton(s_pGamepad, mapping.sdlButton))
+				buttons |= mapping.xinputMask;
 		}
-		else
+
+		const auto& faceButtons = (s_capabilities.style == GamepadStyle::Nintendo) ? s_nintendoFaceButtons : s_standardFaceButtons;
+		for (const auto& mapping : faceButtons)
 		{
-			if (SDL_GetGamepadButton(s_pGamepad, SDL_GAMEPAD_BUTTON_SOUTH))
-				buttons |= XINPUT_GAMEPAD_A;
-			if (SDL_GetGamepadButton(s_pGamepad, SDL_GAMEPAD_BUTTON_EAST))
-				buttons |= XINPUT_GAMEPAD_B;
-			if (SDL_GetGamepadButton(s_pGamepad, SDL_GAMEPAD_BUTTON_WEST))
-				buttons |= XINPUT_GAMEPAD_X;
-			if (SDL_GetGamepadButton(s_pGamepad, SDL_GAMEPAD_BUTTON_NORTH))
-				buttons |= XINPUT_GAMEPAD_Y;
+			if (SDL_GetGamepadButton(s_pGamepad, mapping.sdlButton))
+				buttons |= mapping.xinputMask;
 		}
 
 		pState->Gamepad.wButtons = buttons;
