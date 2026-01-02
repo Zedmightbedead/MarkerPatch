@@ -15,13 +15,13 @@ A patch that fixes various issues and limitations in the PC port of Dead Space 2
 > Extract the contents of the zip file into the game's folder, in the same directory as the `deadspace2.exe` file.
 
 > [!WARNING]
-If the game doesn’t start on Windows after installing the patch, try updating the latest Microsoft Visual C++ Redistributable (x86).  
+If the game doesn't start on Windows after installing the patch, try updating the latest Microsoft Visual C++ Redistributable (x86).  
 You can download it here: https://aka.ms/vs/17/release/vc_redist.x86.exe
 
 ### Steam Deck/Linux Specific Instructions (Windows users can skip this)
 
 > [!WARNING]
-> To launch the game on Steam Deck or Linux, set the game’s compatibility tool to Proton Experimental in the Steam properties.
+> To launch the game on Steam Deck or Linux, set the game's compatibility tool to Proton Experimental in the Steam properties.
 >
 > **Note**: DXVK limits the framerate to 60 FPS by default. To increase this limit, add the following to your launch options (example for 120 FPS):  
 > `DXVK_CONFIG="d3d9.maxFrameRate = 120" %command%`
@@ -43,8 +43,8 @@ Corrects the VSync implementation to use the refresh rate selected in the game's
 <div align="center">
   <table>
     <tr>
-      <td width="50%"><img style="width:100%" src="assets/vsyncfix_off.png"></td>
-      <td width="50%"><img style="width:100%" src="assets/vsyncfix_on.png"></td>
+      <td width="50%"><img style="width:100%" src="https://raw.githubusercontent.com/Wemino/MarkerPatch/main/assets/vsyncfix_off.png"></td>
+      <td width="50%"><img style="width:100%" src="https://raw.githubusercontent.com/Wemino/MarkerPatch/main/assets/vsyncfix_on.png"></td>
     </tr>
     <tr>
       <td align="center">Vanilla (Locked to 30 FPS)</td>
@@ -83,8 +83,8 @@ For those who prefer different subtitle sizes, `FontScalingFactor` in `MarkerPat
 <div align="center">
   <table>
     <tr>
-      <td width="50%"><img style="width:100%" src="assets/scaling_off.png"></td>
-      <td width="50%"><img style="width:100%" src="assets/scaling_on.png"></td>
+      <td width="50%"><img style="width:100%" src="https://raw.githubusercontent.com/Wemino/MarkerPatch/main/assets/scaling_off.png"></td>
+      <td width="50%"><img style="width:100%" src="https://raw.githubusercontent.com/Wemino/MarkerPatch/main/assets/scaling_on.png"></td>
     </tr>
     <tr>
       <td align="center">4K Vanilla</td>
@@ -124,8 +124,8 @@ Set `MaxAnisotropy` from 2 to 16 (16 recommended) for best results.
 <div align="center">
   <table>
     <tr>
-      <td width="50%"><img style="width:100%" src="assets/aniso_off.png"></td>
-      <td width="50%"><img style="width:100%" src="assets/aniso_on.png"></td>
+      <td width="50%"><img style="width:100%" src="https://raw.githubusercontent.com/Wemino/MarkerPatch/main/assets/aniso_off.png"></td>
+      <td width="50%"><img style="width:100%" src="https://raw.githubusercontent.com/Wemino/MarkerPatch/main/assets/aniso_on.png"></td>
     </tr>
     <tr>
       <td align="center">Vanilla (Selective Anisotropic)</td>
@@ -144,8 +144,8 @@ Prevents connection attempts to EA servers at startup and prevents error message
 <div align="center">
   <table>
     <tr>
-      <td width="50%"><img style="width:100%" src="assets/offline_1.png"></td>
-      <td width="50%"><img style="width:100%" src="assets/offline_2.png"></td>
+      <td width="50%"><img style="width:100%" src="https://raw.githubusercontent.com/Wemino/MarkerPatch/main/assets/offline_1.png"></td>
+      <td width="50%"><img style="width:100%" src="https://raw.githubusercontent.com/Wemino/MarkerPatch/main/assets/offline_2.png"></td>
     </tr>
     <tr>
       <td align="center">Boot Error Message (Removed)</td>
@@ -160,8 +160,8 @@ Increases the maximum number of bodies, limbs, and decals that can remain in the
 <div align="center">
   <table>
     <tr>
-      <td width="50%"><img style="width:100%" src="assets/increasedentity_off.png"></td>
-      <td width="50%"><img style="width:100%" src="assets/increasedentity_on.png"></td>
+      <td width="50%"><img style="width:100%" src="https://raw.githubusercontent.com/Wemino/MarkerPatch/main/assets/increasedentity_off.png"></td>
+      <td width="50%"><img style="width:100%" src="https://raw.githubusercontent.com/Wemino/MarkerPatch/main/assets/increasedentity_on.png"></td>
     </tr>
     <tr>
       <td align="center">Vanilla (Battle aftermath with few bodies)</td>
