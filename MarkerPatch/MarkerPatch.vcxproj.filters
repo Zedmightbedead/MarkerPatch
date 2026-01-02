@@ -24,6 +24,9 @@
     <ClInclude Include="..\include\ini.hpp">
       <Filter>include</Filter>
     </ClInclude>
+    <ClInclude Include="..\include\LAAPatcher.hpp">
+      <Filter>include</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="MarkerPatch.ini" />

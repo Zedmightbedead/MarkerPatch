@@ -10,6 +10,7 @@
 #include "Controller.hpp"
 #include "dllmain.hpp"
 #include "helper.hpp"
+#include "LAAPatcher.hpp"
 
 #pragma comment(lib, "SDL3-static.lib")
 
@@ -92,7 +93,7 @@ int IncreasedEntityPersistenceBodies = 0;
 int IncreasedEntityPersistenceLimbs = 0;
 bool IncreasedDecalPersistence = false;
 bool SkipIntro = false;
-bool CheckLAAPatch = false;
+int CheckLAAPatch = 0;
 
 // Display
 bool AutoResolution = false;
@@ -141,7 +142,7 @@ static void ReadConfig()
 	IncreasedEntityPersistenceLimbs = IniHelper::ReadInteger("General", "IncreasedEntityPersistenceLimbs", 96);
 	IncreasedDecalPersistence = IniHelper::ReadInteger("General", "IncreasedDecalPersistence", 1) == 1;
 	SkipIntro = IniHelper::ReadInteger("General", "SkipIntro", 0) == 1;
-	CheckLAAPatch = IniHelper::ReadInteger("General", "CheckLAAPatch", 0) == 1;
+	CheckLAAPatch = IniHelper::ReadInteger("General", "CheckLAAPatch", 0);
 
 	// Display
 	AutoResolution = IniHelper::ReadInteger("Display", "AutoResolution", 1) == 1;
@@ -1526,7 +1527,7 @@ static void Init()
 
 	if (CheckLAAPatch)
 	{
-		SystemHelper::PerformLAAPatch(GetModuleHandleA(NULL));
+		LAAPatcher::PerformLAAPatch(GetModuleHandleA(NULL), CheckLAAPatch != 2);
 	}
 }
 

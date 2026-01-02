@@ -185,6 +185,7 @@
   <ItemGroup>
     <ClInclude Include="..\include\Controller.hpp" />
     <ClInclude Include="..\include\ini.hpp" />
+    <ClInclude Include="..\include\LAAPatcher.hpp" />
     <ClInclude Include="..\include\safetyhook\safetyhook.hpp" />
     <ClInclude Include="..\include\safetyhook\Zydis.h" />
     <ClInclude Include="..\src\dllmain.hpp" />
