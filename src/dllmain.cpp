@@ -107,7 +107,9 @@ bool BlockDirectInputDevices = false;
 bool GyroEnabled = false;
 float GyroSensitivity = 0.0f;
 float GyroSmoothing = 0.0f;
+bool GyroCalibrationPersistence = false;
 bool TouchpadEnabled = false;
+bool InvertABXYButtons = false;
 
 // Graphics
 int MaxAnisotropy = 0;
@@ -156,7 +158,9 @@ static void ReadConfig()
 	GyroEnabled = IniHelper::ReadInteger("Input", "GyroEnabled", 0) == 1;
 	GyroSensitivity = IniHelper::ReadFloat("Input", "GyroSensitivity", 1.0f);
 	GyroSmoothing = IniHelper::ReadFloat("Input", "GyroSmoothing", 0.016f);
+	GyroCalibrationPersistence = IniHelper::ReadInteger("Input", "GyroCalibrationPersistence", 1) == 1;
 	TouchpadEnabled = IniHelper::ReadInteger("Input", "TouchpadEnabled", 1) == 1;
+	InvertABXYButtons = IniHelper::ReadInteger("Input", "InvertABXYButtons", 1) == 1;
 
 	// Graphics
 	MaxAnisotropy = IniHelper::ReadInteger("Graphics", "MaxAnisotropy", 16);
@@ -189,6 +193,7 @@ static void ReadConfig()
 	ControllerHelper::SetGyroSensitivity(GyroSensitivity);
 	ControllerHelper::SetGyroSmoothing(GyroSmoothing);
 	ControllerHelper::SetTouchpadEnabled(TouchpadEnabled);
+	ControllerHelper::SetGyroCalibrationPersistence(GyroCalibrationPersistence);
 }
 
 #pragma region Helper
@@ -819,7 +824,7 @@ safetyhook::InlineHook XInputSetStateHook;
 static DWORD WINAPI XInputGetState_Hook(DWORD dwUserIndex, XINPUT_STATE* pState)
 {
 	if (dwUserIndex != 0) return ERROR_DEVICE_NOT_CONNECTED;
-	return ControllerHelper::PollController(pState);
+	return ControllerHelper::PollController(pState, InvertABXYButtons);
 }
 
 static DWORD WINAPI XInputSetState_Hook(DWORD dwUserIndex, XINPUT_VIBRATION* pVibration)
