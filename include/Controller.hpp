@@ -127,8 +127,11 @@ namespace ControllerHelper
 	inline GyroAutoOffset s_gyroOffset;
 
 	inline TouchpadConfig s_touchpadConfig;
-	inline TouchpadState s_touchpadFinger[2];
-	inline bool s_wasTouchpadPressed[2] = { false, false };
+	static constexpr int MAX_TOUCHPADS = 2;
+	static constexpr int MAX_FINGERS = 2;
+
+	inline TouchpadState s_touchpadFinger[MAX_TOUCHPADS][MAX_FINGERS];
+	inline bool s_wasTouchpadPressed[MAX_TOUCHPADS] = {};
 
 	inline FrameTiming s_frameTiming;
 
@@ -337,10 +340,15 @@ namespace ControllerHelper
 		s_gyroOffset = GyroAutoOffset();
 		s_gyroCalibrationSavedThisSession = false;
 		s_currentControllerSerial.clear();
-		s_touchpadFinger[0] = TouchpadState();
-		s_touchpadFinger[1] = TouchpadState();
-		s_wasTouchpadPressed[0] = false;
-		s_wasTouchpadPressed[1] = false;
+
+		for (int tp = 0; tp < MAX_TOUCHPADS; tp++)
+		{
+			for (int f = 0; f < MAX_FINGERS; f++)
+			{
+				s_touchpadFinger[tp][f] = TouchpadState();
+			}
+			s_wasTouchpadPressed[tp] = false;
+		}
 	}
 
 	// ==========================================================
@@ -941,40 +949,47 @@ namespace ControllerHelper
 		if (!s_pGamepad || !s_capabilities.hasTouchpad || !s_touchpadConfig.isEnabled)
 			return;
 
-		for (int touchpadIndex = 0; touchpadIndex < 2; touchpadIndex++)
+		int numTouchpads = SDL_GetNumGamepadTouchpads(s_pGamepad);
+
+		for (int tp = 0; tp < numTouchpads && tp < MAX_TOUCHPADS; tp++)
 		{
-			bool fingerDown = false;
-			float x = 0.0f, y = 0.0f, pressure = 0.0f;
+			int numFingers = SDL_GetNumGamepadTouchpadFingers(s_pGamepad, tp);
 
-			if (SDL_GetGamepadTouchpadFinger(s_pGamepad, touchpadIndex, 0, &fingerDown, &x, &y, &pressure))
+			for (int finger = 0; finger < numFingers && finger < MAX_FINGERS; finger++)
 			{
-				auto& finger = s_touchpadFinger[touchpadIndex];
+				bool fingerDown = false;
+				float x = 0.0f, y = 0.0f, pressure = 0.0f;
 
-				if (fingerDown)
+				if (SDL_GetGamepadTouchpadFinger(s_pGamepad, tp, finger, &fingerDown, &x, &y, &pressure))
 				{
-					if (finger.wasDown)
+					auto& state = s_touchpadFinger[tp][finger];
+
+					if (fingerDown)
 					{
-						float deltaX = (x - finger.lastX) * s_touchpadConfig.currentWidth;
-						float deltaY = (y - finger.lastY) * s_touchpadConfig.currentHeight;
-
-						if (deltaX != 0.0f || deltaY != 0.0f)
+						if (state.wasDown)
 						{
-							INPUT input = {};
-							input.type = INPUT_MOUSE;
-							input.mi.dwFlags = MOUSEEVENTF_MOVE;
-							input.mi.dx = static_cast<LONG>(deltaX);
-							input.mi.dy = static_cast<LONG>(deltaY);
-							SendInput(1, &input, sizeof(INPUT));
-						}
-					}
+							float deltaX = (x - state.lastX) * s_touchpadConfig.currentWidth;
+							float deltaY = (y - state.lastY) * s_touchpadConfig.currentHeight;
 
-					finger.lastX = x;
-					finger.lastY = y;
-					finger.wasDown = true;
-				}
-				else
-				{
-					finger.wasDown = false;
+							if (deltaX != 0.0f || deltaY != 0.0f)
+							{
+								INPUT input = {};
+								input.type = INPUT_MOUSE;
+								input.mi.dwFlags = MOUSEEVENTF_MOVE;
+								input.mi.dx = static_cast<LONG>(deltaX);
+								input.mi.dy = static_cast<LONG>(deltaY);
+								SendInput(1, &input, sizeof(INPUT));
+							}
+						}
+
+						state.lastX = x;
+						state.lastY = y;
+						state.wasDown = true;
+					}
+					else
+					{
+						state.wasDown = false;
+					}
 				}
 			}
 		}
@@ -1007,7 +1022,7 @@ namespace ControllerHelper
 
 	inline void ReleaseTouchpadClick()
 	{
-		for (int i = 0; i < 2; i++)
+		for (int i = 0; i < MAX_TOUCHPADS; i++)
 		{
 			if (s_wasTouchpadPressed[i])
 			{
