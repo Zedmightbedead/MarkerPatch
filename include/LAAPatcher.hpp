@@ -24,16 +24,21 @@ namespace LAAPatcher
         MessageBoxA(NULL, message.c_str(), "MarkerPatch - LAAPatcher Error", MB_ICONERROR);
     }
 
+    inline void ShowError(const wchar_t* message)
+    {
+        MessageBoxW(NULL, message, L"MarkerPatch - LAAPatcher Error", MB_ICONERROR);
+    }
+
     // ========================
     // Validation Helpers
     // ========================
 
-    inline bool CheckBounds(size_t offset, size_t size, size_t bufferSize, const char* context, char* outError, size_t errorSize)
+    inline bool CheckBounds(size_t offset, size_t size, size_t bufferSize, const char* context, wchar_t* outError, size_t errorSize)
     {
         if (offset + size <= bufferSize)
             return true;
 
-        sprintf_s(outError, errorSize, "%s exceeds bounds (offset=0x%zX, size=0x%zX, bufferSize=%zu).", context, offset, size, bufferSize);
+        swprintf_s(outError, errorSize, L"%S exceeds bounds (offset=0x%zX, size=0x%zX, bufferSize=%zu).", context, offset, size, bufferSize);
         return false;
     }
 
@@ -46,23 +51,23 @@ namespace LAAPatcher
     public:
         explicit PEFile(std::vector<uint8_t>& buffer) : m_buffer(buffer) {}
 
-        bool Validate(char* outError, size_t errorSize)
+        bool Validate(wchar_t* outError, size_t errorSize)
         {
             if (m_buffer.size() < sizeof(IMAGE_DOS_HEADER))
             {
-                sprintf_s(outError, errorSize, "File too small (%zu bytes, need at least %zu).", m_buffer.size(), sizeof(IMAGE_DOS_HEADER));
+                swprintf_s(outError, errorSize, L"File too small (%zu bytes, need at least %zu).", m_buffer.size(), sizeof(IMAGE_DOS_HEADER));
                 return false;
             }
 
             if (DosHeader()->e_magic != IMAGE_DOS_SIGNATURE)
             {
-                sprintf_s(outError, errorSize, "Invalid DOS signature (0x%04X, expected 0x%04X).", DosHeader()->e_magic, IMAGE_DOS_SIGNATURE);
+                swprintf_s(outError, errorSize, L"Invalid DOS signature (0x%04X, expected 0x%04X).", DosHeader()->e_magic, IMAGE_DOS_SIGNATURE);
                 return false;
             }
 
             if (DosHeader()->e_lfanew < 0)
             {
-                sprintf_s(outError, errorSize, "Invalid e_lfanew value (%d, must be non-negative).", DosHeader()->e_lfanew);
+                swprintf_s(outError, errorSize, L"Invalid e_lfanew value (%d, must be non-negative).", DosHeader()->e_lfanew);
                 return false;
             }
 
@@ -71,13 +76,13 @@ namespace LAAPatcher
 
             if (NtHeaders()->Signature != IMAGE_NT_SIGNATURE)
             {
-                sprintf_s(outError, errorSize, "Invalid NT signature (0x%08X, expected 0x%08X).", NtHeaders()->Signature, IMAGE_NT_SIGNATURE);
+                swprintf_s(outError, errorSize, L"Invalid NT signature (0x%08X, expected 0x%08X).", NtHeaders()->Signature, IMAGE_NT_SIGNATURE);
                 return false;
             }
 
             if (NtHeaders()->FileHeader.NumberOfSections == 0)
             {
-                sprintf_s(outError, errorSize, "PE file has zero sections.");
+                swprintf_s(outError, errorSize, L"PE file has zero sections.");
                 return false;
             }
 
@@ -137,19 +142,19 @@ namespace LAAPatcher
 
     inline bool ValidatePatchedFile(const fs::path& origPath, const fs::path& patchPath)
     {
-        char error[512];
+        wchar_t error[512];
         std::vector<uint8_t> origData, patchData;
 
         if (!ReadFile(origPath, origData))
         {
-            sprintf_s(error, "Validation failed: Could not read original file.\nPath: %s", origPath.u8string().c_str());
+            swprintf_s(error, L"Validation failed: Could not read original file.\nPath: %s", origPath.wstring().c_str());
             ShowError(error);
             return false;
         }
 
         if (!ReadFile(patchPath, patchData))
         {
-            sprintf_s(error, "Validation failed: Could not read patched file.\nPath: %s", patchPath.u8string().c_str());
+            swprintf_s(error, L"Validation failed: Could not read patched file.\nPath: %s", patchPath.wstring().c_str());
             ShowError(error);
             return false;
         }
@@ -169,13 +174,13 @@ namespace LAAPatcher
         PEFile origPE(origData);
         PEFile patchPE(patchData);
 
-        if (!origPE.Validate(error, sizeof(error)))
+        if (!origPE.Validate(error, _countof(error)))
         {
             ShowError(error);
             return false;
         }
 
-        if (!patchPE.Validate(error, sizeof(error)))
+        if (!patchPE.Validate(error, _countof(error)))
         {
             ShowError(error);
             return false;
@@ -183,7 +188,7 @@ namespace LAAPatcher
 
         if (origData.size() != patchData.size())
         {
-            sprintf_s(error, "Validation failed: File size changed (original=%zu, patched=%zu).", origData.size(), patchData.size());
+            swprintf_s(error, L"Validation failed: File size changed (original=%zu, patched=%zu).", origData.size(), patchData.size());
             ShowError(error);
             return false;
         }
@@ -207,7 +212,7 @@ namespace LAAPatcher
 
     inline bool PerformLAAPatch(HMODULE hModule, bool showConfirmation)
     {
-        char error[512];
+        wchar_t error[512];
 
         if (!hModule)
         {
@@ -215,29 +220,31 @@ namespace LAAPatcher
             return false;
         }
 
-        wchar_t modulePathRaw[MAX_PATH];
-        DWORD pathLen = GetModuleFileNameW(hModule, modulePathRaw, MAX_PATH);
+        std::wstring modulePathBuf(MAX_PATH, L'\0');
+        DWORD pathLen = GetModuleFileNameW(hModule, modulePathBuf.data(), static_cast<DWORD>(modulePathBuf.size()));
+        while (pathLen == modulePathBuf.size() && GetLastError() == ERROR_INSUFFICIENT_BUFFER)
+        {
+            modulePathBuf.resize(modulePathBuf.size() * 2);
+            pathLen = GetModuleFileNameW(hModule, modulePathBuf.data(), static_cast<DWORD>(modulePathBuf.size()));
+        }
+
         if (pathLen == 0)
         {
-            sprintf_s(error, "GetModuleFileNameW failed. Error: %d", GetLastError());
+            swprintf_s(error, L"GetModuleFileNameW failed. Error: %d", GetLastError());
             ShowError(error);
             return false;
         }
 
-        if (pathLen >= MAX_PATH)
-        {
-            ShowError("Module path exceeds MAX_PATH. Path may be truncated.");
-            return false;
-        }
+        modulePathBuf.resize(pathLen);
 
-        fs::path exePath = modulePathRaw;
+        fs::path exePath = modulePathBuf;
         fs::path exeName = exePath.filename();
         fs::path newPath = exePath; newPath += ".new";
         fs::path bakPath = exePath; bakPath += ".bak";
 
         if (!fs::exists(exePath))
         {
-            sprintf_s(error, "Executable path does not exist: %s", exePath.u8string().c_str());
+            swprintf_s(error, L"Executable path does not exist: %s", exePath.wstring().c_str());
             ShowError(error);
             return false;
         }
@@ -245,14 +252,14 @@ namespace LAAPatcher
         std::vector<uint8_t> buffer;
         if (!ReadFile(exePath, buffer))
         {
-            sprintf_s(error, "Could not read executable file.\nPath: %s\nError: %d", exePath.u8string().c_str(), GetLastError());
+            swprintf_s(error, L"Could not read executable file.\nPath: %s\nError: %d", exePath.wstring().c_str(), GetLastError());
             ShowError(error);
             return false;
         }
 
         if (buffer.empty())
         {
-            sprintf_s(error, "Executable file is empty.\nPath: %s", exePath.u8string().c_str());
+            swprintf_s(error, L"Executable file is empty.\nPath: %s", exePath.wstring().c_str());
             ShowError(error);
             return false;
         }
@@ -264,14 +271,14 @@ namespace LAAPatcher
             uintmax_t requiredSpace = buffer.size() * 2;
             if (spaceInfo.available < requiredSpace)
             {
-                sprintf_s(error, "Not enough disk space to create backup and patched files.\n\nRequired: %llu MB\nAvailable: %llu MB", (requiredSpace / (1024 * 1024)) + 1, spaceInfo.available / (1024 * 1024));
+                swprintf_s(error, L"Not enough disk space to create backup and patched files.\n\nRequired: %llu MB\nAvailable: %llu MB", (requiredSpace / (1024 * 1024)) + 1, spaceInfo.available / (1024 * 1024));
                 ShowError(error);
                 return false;
             }
         }
 
         PEFile pe(buffer);
-        if (!pe.Validate(error, sizeof(error)))
+        if (!pe.Validate(error, _countof(error)))
         {
             ShowError(error);
             return false;
@@ -282,13 +289,13 @@ namespace LAAPatcher
 
         if (showConfirmation)
         {
-            std::string msg = "Your game executable is missing the 4GB/LAA patch. "
-                "This allows the game to use 4GB of memory instead of 2GB, which prevents crashes.\n\n"
-                "MarkerPatch will patch " + exeName.u8string() + " and create a backup.\n\n"
-                "Apply patch and restart the game?\n\n"
-                "(This check can be disabled by setting CheckLAAPatch=0 in the [General] section of MarkerPatch.ini)";
+            std::wstring msg = L"Your game executable is missing the 4GB/LAA patch. "
+                L"This allows the game to use 4GB of memory instead of 2GB, which prevents crashes.\n\n"
+                L"MarkerPatch will patch " + exeName.wstring() + L" and create a backup.\n\n"
+                L"Apply patch and restart the game?\n\n"
+                L"(This check can be disabled by setting CheckLAAPatch=0 in the [General] section of MarkerPatch.ini)";
 
-            if (MessageBoxA(NULL, msg.c_str(), "4GB/Large Address Aware patch missing!", MB_YESNO | MB_ICONEXCLAMATION) != IDYES)
+            if (MessageBoxW(NULL, msg.c_str(), L"4GB/Large Address Aware patch missing!", MB_YESNO | MB_ICONEXCLAMATION) != IDYES)
                 return false;
         }
 
@@ -300,7 +307,7 @@ namespace LAAPatcher
             fs::remove(newPath, ec);
             if (ec)
             {
-                sprintf_s(error, "Failed to remove existing .new file.\nPath: %s\nError: %s", newPath.u8string().c_str(), ec.message().c_str());
+                swprintf_s(error, L"Failed to remove existing .new file.\nPath: %s\nError: %S", newPath.wstring().c_str(), ec.message().c_str());
                 ShowError(error);
                 return false;
             }
@@ -312,9 +319,9 @@ namespace LAAPatcher
             {
                 DWORD err = GetLastError();
                 if (err == ERROR_ACCESS_DENIED)
-                    sprintf_s(error, "Unable to write patched file (Access Denied).\n\nYour Anti-Virus may be blocking modification.\nPlease add an exception for this folder.\nPath: %s", newPath.u8string().c_str());
+                    swprintf_s(error, L"Unable to write patched file (Access Denied).\n\nYour Anti-Virus may be blocking modification.\nPlease add an exception for this folder.\nPath: %s", newPath.wstring().c_str());
                 else
-                    sprintf_s(error, "Failed to create patched file.\nPath: %s\nError: %d", newPath.u8string().c_str(), err);
+                    swprintf_s(error, L"Failed to create patched file.\nPath: %s\nError: %d", newPath.wstring().c_str(), err);
 
                 ShowError(error);
                 return false;
@@ -324,7 +331,7 @@ namespace LAAPatcher
 
             if (!outFile.good())
             {
-                sprintf_s(error, "Failed to write patched file data.\nPath: %s", newPath.u8string().c_str());
+                swprintf_s(error, L"Failed to write patched file data.\nPath: %s", newPath.wstring().c_str());
                 ShowError(error);
                 fs::remove(newPath, ec);
                 return false;
@@ -336,7 +343,7 @@ namespace LAAPatcher
         auto writtenSize = fs::file_size(newPath, ec);
         if (ec || writtenSize != buffer.size())
         {
-            sprintf_s(error, "Written file size mismatch (expected=%zu, actual=%zu).\nPath: %s", buffer.size(), static_cast<size_t>(writtenSize), newPath.u8string().c_str());
+            swprintf_s(error, L"Written file size mismatch (expected=%zu, actual=%zu).\nPath: %s", buffer.size(), static_cast<size_t>(writtenSize), newPath.wstring().c_str());
             ShowError(error);
             fs::remove(newPath, ec);
             return false;
@@ -364,13 +371,13 @@ namespace LAAPatcher
 
             if (err == ERROR_SHARING_VIOLATION || err == ERROR_LOCK_VIOLATION)
             {
-                sprintf_s(error, "LAA Patch failed: File is locked by another process.\n\nError: %d\n\nYou can disable this check by setting CheckLAAPatch=0 in MarkerPatch.ini", err);
+                swprintf_s(error, L"LAA Patch failed: File is locked by another process.\n\nError: %d\n\nYou can disable this check by setting CheckLAAPatch=0 in MarkerPatch.ini", err);
                 ShowError(error);
                 fs::remove(newPath, ec);
                 return false;
             }
 
-            sprintf_s(error, "Failed to backup original executable.\n\nError: %d", err);
+            swprintf_s(error, L"Failed to backup original executable.\n\nError: %d", err);
             ShowError(error);
             fs::remove(newPath, ec);
             return false;
@@ -380,7 +387,7 @@ namespace LAAPatcher
         {
             DWORD err = GetLastError();
             MoveFileW(bakPath.wstring().c_str(), exePath.wstring().c_str());
-            sprintf_s(error, "Failed to rename patched file to original. Restored from backup.\n\nError: %d", err);
+            swprintf_s(error, L"Failed to rename patched file to original. Restored from backup.\n\nError: %d", err);
             ShowError(error);
             return false;
         }
@@ -394,8 +401,8 @@ namespace LAAPatcher
         }
         else
         {
-            sprintf_s(error, "Patching completed successfully, but failed to restart the application.\nShellExecute returned: %d\n\nPlease restart the game manually.", static_cast<int>(shellResult));
-            MessageBoxA(NULL, error, "MarkerPatch - LAAPatcher Warning", MB_ICONWARNING);
+            swprintf_s(error, L"Patching completed successfully, but failed to restart the application.\nShellExecute returned: %d\n\nPlease restart the game manually.", static_cast<int>(shellResult));
+            MessageBoxW(NULL, error, L"MarkerPatch - LAAPatcher Warning", MB_ICONWARNING);
             return true;
         }
     }
