@@ -622,10 +622,13 @@ static void __fastcall UpdateMenuCursor_Hook(int thisp, float a2)
 
 	// Get input manager instance
 	int inputManager = *(int*)g_Addresses.InputManagerPtr;
+	
+	// Calculate resolution scale
+	float resolutionScale = (g_State.screenWidth / 1024.0f + g_State.screenHeight / 768.0f) / 2.0f;
 
 	// Calculate cursor movement delta for X and Y axes
-	float menuDeltaX = static_cast<float>(rawX) * g_State.mouseSens * 1.6f;
-	float menuDeltaY = static_cast<float>(rawY) * g_State.mouseSens * 1.6f;
+	float menuDeltaX = static_cast<float>(rawX) * g_State.mouseSens * resolutionScale;
+	float menuDeltaY = static_cast<float>(rawY) * g_State.mouseSens * resolutionScale;
 
 	// Write the calculated cursor movement deltas
 	*(float*)(inputManager + 1348) = menuDeltaX;
