@@ -141,8 +141,8 @@ float GyroSmoothing = 0.0f;
 bool GyroCalibrationPersistence = false;
 bool TouchpadEnabled = false;
 bool InvertABXYButtons = false;
-float PitchLimitNormal = 0.0f;
-float PitchLimitAimDown = 0.0f;
+float PitchLimitNormalScale = 1.0f;
+float PitchLimitAimDownScale = 1.0f;
 float WeaponFireRateScalingFactor = 0.0f;
 
 // Graphics
@@ -203,8 +203,8 @@ static void ReadConfig()
 	GyroCalibrationPersistence = IniHelper::ReadInteger("Input", "GyroCalibrationPersistence", 1) == 1;
 	TouchpadEnabled = IniHelper::ReadInteger("Input", "TouchpadEnabled", 1) == 1;
 	InvertABXYButtons = IniHelper::ReadInteger("Input", "InvertABXYButtons", 1) == 1;
-	PitchLimitNormal = IniHelper::ReadFloat("Input", "PitchLimitNormal", static_cast<float>(M_PI) / 3.0f);
-	PitchLimitAimDown = IniHelper::ReadFloat("Input", "PitchLimitAimDown", -5.0f * static_cast<float>(M_PI) / 12.0f);
+	PitchLimitNormalScale = IniHelper::ReadFloat("Input", "DownwardsAimLimitScalar", 1.0f);
+	PitchLimitAimDownScale = IniHelper::ReadFloat("Input", "UpwardsAimLimitScalar", 1.0f);
 	WeaponFireRateScalingFactor = IniHelper::ReadFloat("Input", "WeaponFireRateScalingFactor", 1.0f);
 
 	// Graphics
@@ -592,8 +592,7 @@ static bool __fastcall CheckFireCooldown_Hook(int thisp, int)
 	float* fireDelayPtr = (float*)(thisp + 800);
 	float originalDelay = *fireDelayPtr;
 
-	// Adjust scaling to affect most weapons
-	if (originalDelay <= 0.8f)
+	if (originalDelay <= 1.0f) // Increase from 0.1f to 1.0f to adjust scaling so it affects every weapon
 	{
 		float timeDelta = TARGET_FRAME_TIME - g_State.frameTime;
 		float coefficient = 10.0f;
@@ -707,11 +706,11 @@ static int __cdecl GetGameLanguage_Hook(char* String2, size_t MaxCount)
 
 	switch (result)
 	{
-	case 2: AchievementOverlay::SetLanguage("fr"); break;
-	case 3: AchievementOverlay::SetLanguage("de"); break;
-	case 5: AchievementOverlay::SetLanguage("it"); break;
-	case 8: AchievementOverlay::SetLanguage("es"); break;
-	default: AchievementOverlay::SetLanguage("en"); break;
+		case 2: AchievementOverlay::SetLanguage("fr"); break;
+		case 3: AchievementOverlay::SetLanguage("de"); break;
+		case 5: AchievementOverlay::SetLanguage("it"); break;
+		case 8: AchievementOverlay::SetLanguage("es"); break;
+		default: AchievementOverlay::SetLanguage("en"); break;
 	}
 
 	return result;
@@ -1022,8 +1021,10 @@ static int __fastcall AimingApplyRotation_Primary(int* thisp, int, unsigned __in
 				angles[1] += gyroYaw;
 
 				float currentPitch = *(float*)thisp;
+				float pitchLimitMin = (PITCH_LIMIT_AIM_DOWN * PitchLimitAimDownScale);
+				float pitchLimitMax = (PITCH_LIMIT_NORMAL * PitchLimitNormalScale);
 				float newPitch = currentPitch + angles[0];
-				angles[0] = std::clamp(newPitch, PitchLimitAimDown, PitchLimitNormal) - currentPitch;
+				angles[0] = std::clamp(newPitch, pitchLimitMin, pitchLimitMax) - currentPitch;
 
 				return OriginalApplyCameraRotation(thisp, PackAngles(angles[0], angles[1]), a3, a4);
 			}
@@ -1039,8 +1040,10 @@ static int __fastcall AimingApplyRotation_Primary(int* thisp, int, unsigned __in
 	if (g_State.isYInverted) verticalDelta = -verticalDelta;
 
 	float currentPitch = *(float*)thisp;
+	float pitchLimitMin = (PITCH_LIMIT_AIM_DOWN * PitchLimitAimDownScale);
+	float pitchLimitMax = (PITCH_LIMIT_NORMAL * PitchLimitNormalScale);
 	float newPitch = currentPitch + verticalDelta;
-	verticalDelta = std::clamp(newPitch, PitchLimitAimDown, PitchLimitNormal) - currentPitch;
+	verticalDelta = std::clamp(newPitch, pitchLimitMin, pitchLimitMax) - currentPitch;
 
 	return OriginalApplyCameraRotation(thisp, PackAngles(verticalDelta, horizontalDelta), a3, a4);
 }
@@ -1056,8 +1059,10 @@ static int __fastcall AimingApplyRotation_Secondary(int* thisp, int, unsigned __
 	if (g_State.isYInverted) verticalDelta = -verticalDelta;
 
 	float currentPitch = *(float*)thisp;
+	float pitchLimitMin = (PITCH_LIMIT_AIM_DOWN * PitchLimitAimDownScale);
+	float pitchLimitMax = (PITCH_LIMIT_NORMAL * PitchLimitNormalScale);
 	float newPitch = currentPitch + verticalDelta;
-	verticalDelta = std::clamp(newPitch, PitchLimitAimDown, PitchLimitNormal) - currentPitch;
+	verticalDelta = std::clamp(newPitch, pitchLimitMin, pitchLimitMax) - currentPitch;
 
 	return OriginalApplyCameraRotation(thisp, PackAngles(verticalDelta, 0.0f), a3, a4);
 }
@@ -1074,8 +1079,9 @@ static int __fastcall PlayerApplyRotation(int* thisp, int, unsigned __int64 a2, 
 	if (g_State.isYInverted) verticalDelta = -verticalDelta;
 
 	float currentPitch = *(float*)thisp;
+	float pitchLimitMax = PITCH_LIMIT_NORMAL * PitchLimitNormalScale;
 	float newPitch = currentPitch + verticalDelta;
-	verticalDelta = std::clamp(newPitch, -PitchLimitNormal, PitchLimitNormal) - currentPitch;
+	verticalDelta = std::clamp(newPitch, -pitchLimitMax, pitchLimitMax) - currentPitch;
 
 	return OriginalApplyCameraRotation(thisp, PackAngles(verticalDelta, horizontalDelta), a3, a4);
 }
@@ -1191,11 +1197,11 @@ static int __fastcall ApplyBoundedAim(int* thisp, int, unsigned __int64 a2, unsi
 	uintptr_t clampBase;
 	switch (*reinterpret_cast<int*>(v4 + 588))
 	{
-	case 1:     clampBase = v4 + 608; break;
-	case 2:
-	case 3:     clampBase = v4 + 624; break;
-	case 5:     clampBase = v4 + 640; break;
-	default:    clampBase = v4 + 592; break;
+		case 1:     clampBase = v4 + 608; break;
+		case 2:
+		case 3:     clampBase = v4 + 624; break;
+		case 5:     clampBase = v4 + 640; break;
+		default:    clampBase = v4 + 592; break;
 	}
 
 	float* bounds = reinterpret_cast<float*>(clampBase);
@@ -2193,7 +2199,7 @@ static void ApplyRawMouseInput()
 		addr_UpdatePlayerCamera == 0 ||
 		addr_ApplyCameraRotation == 0 ||
 		addr_UpdateWeaponPoseBlend == 0 ||
-		addr_UpdateAimWithMomentum == 0 ||
+		addr_UpdateAimWithMomentum == 0 || 
 		addr_UpdateBoundedAim == 0 ||
 		addr_UpdateConeAim == 0 ||
 		addr_UpdateOscillatingAim == 0) {
@@ -2289,7 +2295,7 @@ static void ApplyTextureFiltering()
 
 static void ApplyDynamicShadowResolution()
 {
-	if (DynamicShadowResolution <= 1920) return;
+//	if (DynamicShadowResolution <= 1920) return;		<-- Skip to allow override dynamic shadow resolution to lower than 1080p
 
 	DWORD addr_ShadowRes = ScanModuleSignature(g_State.GameModule, "8B 44 24 04 83 E0 E0 83 EC 0C 3B 05", "ShadowRes");
 
@@ -2423,7 +2429,7 @@ static void ApplyD3D9ApiMidHook()
 			AchievementOverlay::OnPresent();
 		}
 	);
-
+	
 	static SafetyHookMid Present2{};
 	Present2 = safetyhook::create_mid(reinterpret_cast<void*>(addr_Present2),
 		[](safetyhook::Context&)
@@ -2525,28 +2531,28 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 {
 	switch (ul_reason_for_call)
 	{
-	case DLL_PROCESS_ATTACH:
-	{
-		// Prevents DLL from receiving thread notifications
-		DisableThreadLibraryCalls(hModule);
-
-		// Skip wrapper initialization when loaded as .asi
-		if (!IsUALPresent())
+		case DLL_PROCESS_ATTACH:
 		{
-			SystemHelper::LoadProxyLibrary();
-		}
+			// Prevents DLL from receiving thread notifications
+			DisableThreadLibraryCalls(hModule);
 
-		regOpenKeyHook = HookHelper::CreateHookAPI(L"advapi32.dll", "RegOpenKeyExW", &RegOpenKeyExW_Hook);
-		break;
-	}
-	case DLL_PROCESS_DETACH:
-	{
-		if (UseSDLControllerInput)
-		{
-			ControllerHelper::ShutdownSDLGamepad();
+			// Skip wrapper initialization when loaded as .asi
+			if (!IsUALPresent())
+			{
+				SystemHelper::LoadProxyLibrary();
+			}
+
+			regOpenKeyHook = HookHelper::CreateHookAPI(L"advapi32.dll", "RegOpenKeyExW", &RegOpenKeyExW_Hook);
+			break;
 		}
-		break;
-	}
+		case DLL_PROCESS_DETACH:
+		{
+			if (UseSDLControllerInput)
+			{
+				ControllerHelper::ShutdownSDLGamepad();
+			}
+			break;
+		}
 	}
 	return TRUE;
 }
